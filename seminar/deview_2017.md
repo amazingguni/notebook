@@ -359,3 +359,276 @@ deprecated되거나 창업하거나 잘되거나 하는 결론이 났네용
 - 배운 조금의 것을 공유하고 이야기를 들어서 성장하고 싶네요 낄껄
 
 [https://naver.github.io/OpenSourceGuide/book/](https://naver.github.io/OpenSourceGuide/book/)
+
+# Clova Platform 정민영
+
+## 1. Clova Platform
+
+### Overview
+
+세 개의 레이어로 구성됨
+
+1. App device
+2. Clova
+3. Contents/Service
+
+Clova Interface Connect(App/Device과 Clova를 이어줌)
+
+Clova Extensions Kit(Clova와 Content를 이어줌)
+
+### Clova Interface Connect
+
+1. 하드웨어 개발자가 제품에 Clova Interface 연결 가능
+2. Public API 및 ASK 제공
+3. 음성, Vision을 단일 인터페이스로 제공
+4. 저전력, IoT환경에서도 사용 가능
+
+### Clova Extension Kit
+
+1. Service 및 Content를 Clova에 손쉽게 연결
+2. 간단한 설정과 REST API 연동으로 자연어 기반 서비스 개발
+3. Public API / SDK 
+4. 단계별 Builder 및 온라인 테스트 환경 제공
+
+### Open Platform
+
+1. 네이버, 라인이 사용하는 Platform 그대로 공개
+2. Extension marketplace 운용 예정
+3. 최고 수준의 SDK / API 문서 지원
+  - 엄청 디테일하게 작성중이다
+4. 인식, 합성, Vision 개발 API 제공
+
+## 2. Architecture & Teck Stack
+
+### Challenge
+
+1. 요청 받아 분석 전까지는 무슨 내용인지 알 수 없는 API가 있음
+2. Latency에 매우 민감
+  - 말을 하면 빨리 대답이 오길 사용자는 기대함
+3. 하나의 요청을 처리하기 위해 무수히 많은 서비스와 연결된다.
+  - 네이버의 다양한 서비스들을 사용할 수 있다는 장점이 있고 그것이 도전이기도 하다.
+4. 요청을 받는 와중에서라도 서버가 Interrupt하거나 응답을 주어야 한다.
+
+### Protocol
+
+1. 연결 신뢰성이 있어야 함
+2. Latency
+3. 민감 정보(음성/사진)를 다루기 때문에 보안성 중요
+4. Open Platform을 지향하므로 Client 구현이 쉬워야 함
+5. Protocol을 선택해야 했음
+
+### HTTP/2
+
+1. 최적의 프로토콜
+2. 헤더 압축, Multiplexing 등을 통한 Latency rkath
+3. Binary Frame based Protocol
+4. Single TCP Connection & Ping-Ping mechanism
+5. TLS Based Security
+
+> HTTP/2도 공부해봐야겠구만
+
+### Golang
+
+1. 여러 조사를 한 이후에 Golang 선택
+2. C/C++ 기반의 자산을 활용하기 쉽고
+3. 검토 당시 가장 성숙한 HTTP/2 서버 구현 보유
+4. Platform 특성상 대부분의 Workload는 I/O에서 발생
+
+이래서 선택
+
+Cgo는 무척 편리한 도구이고 강력하지만
+
+- C 언어로 구현된 코드를 go에서 사용하기 위한 라이브러리
+- 생각보다 cost가 높고, 환경 구축, 빌드, 배포 등에 지연 요소로 동작함
+- 기존 자산을 활용해 시간을 벌고, 단계적으로 Native go 구현으로 이전중
+
+### Monitoring
+
+1. 복잡하게 연관된 시스템에 대한 모니터링
+2. 특정 API에 대한 성공/실패에 대한 점검 만으로는 의미가 없거나 부족함
+3. 알수 없는 blackbox 테스트를 위해서도 필요했음
+
+END TO END BLOCKBOX Testing을 진행함
+
+- **자연어 입력** 과 **기대 결과** 를 검사
+- 자연어 입력으 텍스트 혹은 음성
+- 오늘날씨 어때? 나 지금 몇시야? 데 애한 기대 결과는?
+  - 네이버에서는 검색 결과...라서
+  - 실패를 검출하기 어려움
+
+결국 테스트 목적의 CIC 클라이언트 개발
+
+- Input에 대해서 Client의 작동을 모사
+- 테스트 정의는 파이선으로 함
+- 왜냐면 문자열 조작이 고보다 쉬우고, DSL을 만들기 쉬웠음
+- Python-Hyper
+- 24/365 끝없는 Regression Test, Alerting
+
+## Clova Interface Connect
+
+### Interface Connect
+
+새로운 Human Interface에 대한 표준 API 제공
+
+- 음성, Vision(예정)
+- Downstream Channel과 Event Request로 구성
+- 요청(Event)를 보내서 명령(Directive)를 수신
+
+### Interface Connect - Auth
+
+한국, 일본간 인증 기반과 체계가 다름(Naver, Line)
+
+- 기술 체계도 미묘하게 다르고 법률 문제가 있다.
+- 그래서 oAuth 2.0으로 추상화 중이다.
+
+### Interface Connect - Downstream Channel
+
+모든 CIC Client는 반드시 1개의 Downstream Channel을 유지
+
+### Event
+
+Clova Client에서 올려보내는 모든 요청
+
+- 요청의 내용이 아닌 요청의 종류에 대응
+- 음성 인식 요청, 영상 인식 요청, 재생 상태 보고, 버튼 눌림 보고 ..
+- 요청 ID
+- Wake-Up Word 같은 각종 Interruption 요소
+
+### Directive
+
+Clilent의 eEvent에 대응하여 Platform이 제공하는 명령
+
+- Directive의 표준화에 신경을 많이 썻다고 함
+- 특정 표현이 아닌 의미를 규정
+- 서로 다른 SW/HW 환경을 가진 클라이언트에도 동일한 동작을 하도록..
+
+### Context & Event Driven
+
+- Ambiguity 문제가 있다.(멈춰줘 - 뭘 멈추지?)
+
+Client가 Directive를 수행하리란 보장이 없거나, 언제 할지도 모름
+
+따라서 지시 -> Callback의 구조를 가져감
+
+### Intent
+
+자연어, 행동 등을 {Namespace}.{Name}의 형태로 표현
+
+- 표현이 다르지만 같은 의미는 같은 Intent로 표현
+- Intent마다 개별 Parameter를 가질 수 있음
+
+### Intent Routing
+
+1. Platform은 Intent를 기준으로 실제 요청을 처리할 서비스를 선택
+2. Intent에 대한 입력과 출력 포맷을 표준화
+
+> 여기가 플랫폼 확장에 중요하게 생각하는 포인트라고 함
+
+### Backward Compatibility
+
+1. Embedded 환경에 많이 배포되는 특성상 하위 호환성이 무척 중요
+2. Text 기반의 Protocol, Semantic Versioning을 통한 Version 협상
+3. Field는 항상 추가만 수행, 적정 시점에서 Interface 분리
+4. Clilent는 모르는 요청 무시
+
+## Clova Extension Kit
+
+### Itneraction Model
+
+자연어를 어떻게 이해하고 분석할지를 작성하는 부분
+
+- 슬롯도 정의할 수 있음(가령 ~~로 가라해의 ~~)
+- 위의 경우엔 가라가 Intent
+
+1. 통계 기반으로 언어를 분석하고, 
+  -  작성하지 않아도 적용될 수 있도록
+2. 기본적인 표현은 추가되어 있다.(슬롯까지 포함되서)
+
+
+### Request Model
+
+1. 모든 요청은 JSON
+2. HTTPS Required 예정
+3. 사용자, 기기에 대한 정보 제공
+4. 세션 제공
+
+### Request Model - Context
+
+사용자 기기의 정보, 식별자, 지원 기능, 상태 등등 제공
+
+### Request Model - Lifecycle
+
+Extension은 실행되어 요청을 받고 종료되는 생명 주기를 가진다.
+
+- 한 생명 주기 내에서 정보를 저장할 수 있는 Session 제공
+
+### Request Model - Event Request
+
+1. 사용자의 명시적인 실행이 있는 경우에만 호출됨
+2. 음악 재생이나 정지같은 경우에는 암시적으로 실행되기도 함
+
+### Response Model
+
+1. TTS, Template
+  - 답변 문구 제공
+  - 음성 안내는 간단한 상태, 자세한 상태 두가지로 제공 가능
+  - 음성외 10여종의 템플릿 제공
+  - 템플릿은 표현형태가 아닌 데이터를 기술
+2. Directive Model
+  - 요청한 CIC Device의 작동을 제어
+  - 모든 Device가 지정한 Directive 수행을 보장하지는 않음
+  - Extension은 Device에 해당 작동을 요청하고 Device는 수행 여부를 응답
+3. Multi Turn
+  - Extension이 추가적인 입력을 원할 경우(컨텍스트가 필요)
+    - 내일 몇시에 알려드릴가요?
+  - Extension이 종료를 희망하지 않을 경우 CIC는 무조건 추가 입력을 시도
+  - CEK Session을 통해서 대화 상태 관리
+4. Builder
+  - 웹 기반의 Extension관리 및 개발/테스트 도구
+  - 빌트인 기능들을 사용하기 쉽도록 제공
+  
+## Dash robot extension 데모
+
+# 웨일 브라우저의 보안
+
+## push notification
+
+push notification은 O2O 서비스에서 핵심적인 요소 중 하나. 기존 O2O 서비스들 대부분 App push를 이용
+
+- Permission을 어덩야 함
+- 근데 한번 거절 당하면 다시 허용시킬 방법이 없음 ㅠ_ㅠ
+- push 서비스 제공 업체에게는 별로인 방식임(allow, block을 하면서)
+  - 왜냐면 거의 5%만 동의를 하기 때문에
+- 프롬프트 창에는 제공하고자 하는 서비스의 내용이 없기 때문이 강한 이유
+- 잘 안보이기도 함
+- 무의식적으로 블락하기 좋은 위치이기도 함
+- 사용자는 특정 사이트를 블록했는지도 사실 잘 모름
+
+그래서 permission ui를 최대한 늦게 보여주어야 한다는 결론을 내리게됨
+
+- 중간 단계 UX로 권한이 필요하다는 것을 모두 알게 된 이후에 Block 여부를 확인하도록 함
+- 그 결과 사람들이 많이 누르게됨 5% -> 50%
+
+다양한 기능을 payload에 실어 보낼 수 있음
+
+- 아이콘, 문자
+- 심지어 yes no 여부까지
+
+그러나 잘 안되는 경우도 있음.. 
+
+- 브라우저 호환성을 위해, 데이터를 직접 뷰잉하지 않고
+- service worker에서 처리(통신은 간단한 코드 형태로 하고)
+
+## Payment
+
+인스턴스한 1회성 주문 시나리오에서의 결제는?
+
+- 추가적인 앱 설치가 업성야 함
+- Merchant 가 사용사가 원하는 지불수단을 제공해야 함
+
+갑자기 web payment에 대한 설명이 등장했다.
+
+## 미래
+
+
+
