@@ -229,37 +229,286 @@ CPU에서 나오는 모든 주소는 페이지 번호(p)와 페이지 변위(d:o
 
 만약 논리 주소 공간의 크기가 2^m, 페이지가 2^n 크기라면 논리 주소의 상위 m-n 비트는 페이지 번호를 나타내고, 하위 n 비트는 페이지 변위를 나타낸다.
 
+- p는 페이지 테이블에 대한 인덱스로 사용된다.
+- d는 페이지 내에서의 변위로 사용된다.
+
 ![https://www.cs.uic.edu/~jbell/CourseNotes/OperatingSystems/images/Chapter8/8_11A_PageNumberOffset.jpg](https://www.cs.uic.edu/~jbell/CourseNotes/OperatingSystems/images/Chapter8/8_11A_PageNumberOffset.jpg)
 
+![https://www.cs.uic.edu/~jbell/CourseNotes/OperatingSystems/images/Chapter8/8_12_PagingExample.jpg](https://www.cs.uic.edu/~jbell/CourseNotes/OperatingSystems/images/Chapter8/8_12_PagingExample.jpg)
 
+- 페이징을 사용하면 외부 단편화가 발생하지 않는다.
+	- 임의의 가용 프레임이 프로세스에게 할당될 수 있기 때문
+- 하지만 내부 단편화가 발생한다.
+	- 항상 프레임의 정수 배로 할당되기 때문
+	- 최악의 경우 프로세스가 n개의 페이지와 추가로 1B를 요구할 수 있다.
+	- 평균적으로 프로세스 당 반 페이지 정도의 내부 단편화가 예상된다.
 
+1. 페이지 크기를 줄이면
+	- 내부 단편화가 줄어든다.
+	- 페이지 테이블이 커져 공간이 낭비된다.
+2. 늘리면
+	- 디스크 입장에서는 페이지 크기가 클수록 효율적
+	- 점점 커니는 추세
+	- 2~8KB wjdeh
 
+일반적으로 페이지 테이블 내의 각 엔트리는 4B이다.
 
+- 32bit로 2^32의 프레임을 가질 수 있다.
+
+페이징의 가장 중요한 특징은 논리적 메모리와 물리적 메모리를 명확하게 분리한다는 것이다.
+
+- 어플리케이션은 메모리가 하나의 연속된 공간이라고 생각한다.
+- 하지만 산재된다.
+- 사용자 프로그램이 만들어내는 논리주소는 주소 변환 하드웨어에 의해 변환된다.
+- 이를 통해 사용자는 자신이 아닌 다른 프로세스에 접근조차할 수 없다.(페이지만 가리키기 때문)
+
+- 운영체제는 프레임 테이블이라는 자료구조에 물리 메모리의 자세한 할당 정보를 관리하고 있다.
+	- 어느 프레임이 할당되어 있고, 사용 가능한지, 몇 개나 되는지 등
+- 또한, 운영체제는 각 프로세스의 페이지 테이블을 복사해 운영체제가 논리 주소를 물리 주소로 변환할 때 사용한다.
+	- 시스템 콜 시에 필요
+- 프로세스가 CPU를 할당받았을 때 하드웨어 페이지 테이블을 설정하는데 CPU 디스페처가 사용된다.
+	- 문맥 교환 시간을 증가시킨다.
 
 ## 8.4.2 하드웨어 지원
 
+대부분의 OS는 각 프로세스마다 하나의 페이지 테이블을 할당한다.
+
+- 페이지 테이블을 가리키는 포인터는 프로세스의 다른 레지스터 값과 함께 PCB에 저장된다.
+- 디스패처가 프로세스를 시작시킬 때, 이 레지스터들을 다시 적재하면 페이지 테이블도 함게 사용할 수 있게 된다.
+
+페이지 테이블을 하드웨어로 구현하는 여러 가지 방법이 있다.
+
+1. 전용 레지스터의 집합으로 구현 - 가장 간단
+	- 페이징 주소 변환을 효율적으로 하기 위해 고속 논리 회로로 설계
+	- 디스패처는 이 레지스터도 재적재해주어야 한다.
+	- 페이지 테이블이 작은 경우에(대략 256항목 이후) 적합
+2. 페이지 테이블 기준 레지스터(PTBR, Page-Table Base Register)
+	- 현재 컴퓨터는 백만 항목 이상의 페이지 테이블을 갖는다. 
+	- 페이지 테이블을 주 메모리에 저장하고 PTBR로 하여금 가리키게 한다.
+	- 다른 페이지 테이블을 사용하려면 이 레지스터만 교체하면 된다.
+		- 문맥 교환 시간 감소
+	- 이 방식은 메모리 접근 시간이 생긴다는 단점이 있다.
+		- 한 주소에 접근하기 위해 두 번의 메모리 접근 필요
+		- 메모리 접근이 2배로 늘어남.
+	- TLB(Translation Look-aside Buffer)라는 소형 하드웨어 캐시를 사용하여 메모리 접근 횟수를 줄이는 방법으로 극복한다.
+		- 처음 메모리 접근 시에 TLB에 페이지를 찾아다라고 요청한다.
+		- TLB는 동시에 여러 개의 내부 키(페이지 번호)와 비교한다.
+		- 같은 것이 발견되면 프레임 번호를 알려준다.
+		- 하드웨어가 매우 비싸다.
+		- 64-1024 개 정도까지 저장한다.
+
+
+![https://www.cs.uic.edu/~jbell/CourseNotes/OperatingSystems/images/Chapter8/8_14_PagingHardware.jpg](https://www.cs.uic.edu/~jbell/CourseNotes/OperatingSystems/images/Chapter8/8_14_PagingHardware.jpg)
+
+어떤 TLB는 각 항목에 ASIDs(address-space idenftifiers)를 저장하기도 한다.
+
+- TLB 항목이 어느 프로세스에게 속한 것인지 알려주며, 그 프로세스의 주소 공간을 보호하기 위해 사용된다.
+- ASID 지원이 있으면 여러 프로세스의 정보를 한 TLB 안에 보관할 수 있다.
+- TLB가 가상 페이지 번호를 변환할 때 현재 실행 중인 프로세스의 ASID와 동일한지 검사한다.
+	- 맞지 않으면 TLB 부재로 처리
+
+ASID가 지원되지 않으면 새로운 페이지 테이블이 선택될 때마다(새 프로세스가 문맥 교환을 해서 실행되는 경우) TLB는 모두 플러시가 되어야 한다.
+
 ## 8.4.3 보호
 
+페이지화된 환경에서 메모리의 보호는 각 프레임과 연관된 보호 비트에 의해 구현된다.
+
+- 이는 보통 페이지 테이블에 속한다.
+- 한 비트는 읽고쓰기/읽기전용 임을 정의하고
+	- 읽기 전용에 쓰기 연산이 실행되면 트랩이 발생된다.
+- 다른 비트는 유효/무효를 나타내는데 사용된다.
+	- 유효는 페이지가 합법적인 페이지임을 나타낸다.
+	- 불법적인 주소는 이 비트로 판별한다.
+
+페이지 테이블도 항상 모든 공간을 차지하는 것은 낭비일 수 있다.
+
+- 페이지 테이블의 크기를 나타내는 PTLR, Page Table Length Registser 를 이용하는 시스템도 존재한다.
+- 이를 넘어서는 페이지 주소가 들어오면 트랩 이 발생된다.
+
+![https://www.cs.uic.edu/~jbell/CourseNotes/OperatingSystems/images/Chapter8/8_15_ValidBits.jpg](https://www.cs.uic.edu/~jbell/CourseNotes/OperatingSystems/images/Chapter8/8_15_ValidBits.jpg)
+
 ## 8.4.4 공유 페이지
+
+페이징의 또 다른 장점은 공통 코드를 공유할 수 있다는 점이다.
+
+- 시분할 환경에서 특히 더 중요하다.
+- 재진입 가능 코드만 다수의 프로세서에게 공유할 수 있다
+	- 재진입 가능 코드는 실행하는 동안 절대로 변하지 않는다
+	- 동시에 여러 개의 프로세서들이 같은 코드를 실행할 수 있다.
+
+![https://www.cs.uic.edu/~jbell/CourseNotes/OperatingSystems/images/Chapter8/8_16_CodeSharing.jpg](https://www.cs.uic.edu/~jbell/CourseNotes/OperatingSystems/images/Chapter8/8_16_CodeSharing.jpg) 
 
 # 8.5 페이지 테이블의 구조
 
 ## 8.5.1 계층적 페이징(Hierachical Paging)
 
+대부분의 현대 컴퓨터는 매우 큰 논리 주소 공간(2^32~64)을 지원한다.
+
+- 이런 환경에서는 페이지 테이블 자체가 상당히 커진다.
+- 이렇게 커진 페이지 테이블도 연속적으로 주 메모리에 할당하기가 어려워진다.
+
+따라서 페이징 테이블을 다시 페이징하는 **2단계 페이징 기법**을 사용할 수 있다.
+
+![https://www.cs.uic.edu/~jbell/CourseNotes/OperatingSystems/images/Chapter8/8_22A_TwoLevelPageNumberOffset.jpg](https://www.cs.uic.edu/~jbell/CourseNotes/OperatingSystems/images/Chapter8/8_22A_TwoLevelPageNumberOffset.jpg)
+
+![https://www.cs.uic.edu/~jbell/CourseNotes/OperatingSystems/images/Chapter8/8_17_TwoLevelPageTable.jpg](https://www.cs.uic.edu/~jbell/CourseNotes/OperatingSystems/images/Chapter8/8_17_TwoLevelPageTable.jpg)
+
+![https://www.cs.uic.edu/~jbell/CourseNotes/OperatingSystems/images/Chapter8/8_18_AddressTranslation.jpg](https://www.cs.uic.edu/~jbell/CourseNotes/OperatingSystems/images/Chapter8/8_18_AddressTranslation.jpg)
+
 ## 8.5.2 해시된 페이지 테이블(Hashed Page Tables)
 
+주소 공간이 32비트보다 커지면 가상 주소를 해시값으로 사용하는 해시 페이지 테이블을 많이 쓴다.
+
+- 64비트를 예로 들면 6~7단계 페이징이 필요한데, 그만큼 메모리 접근을 요하기에 비현실적인 해법이 된다.
+
+해시 페이지 테이블의 각 항목은 세 개의 필드를 가진다.
+
+1. 가상 페이지 번호
+2. 맵핑되는 페이지 프레임 번호
+3. 연결 리스트 상의 다음 원소를 가리키는 포인터
+
+알고리즘은 다음과 같이 동작한다.
+
+1. 가상 주소의 가상 페이지 번호를 해싱한다
+2. 해당 해시값의 연결 리스트의 첫 번째 원소와 가상 페이지 번호를 비교한다.
+3. 일치하면 그에 대응하는 페이지 프레임 번호를 사용하여 물리 주소를 얻는다.
+4. 일치하지 않으면 연결 리스트의 그 다음 원소들을 탐색해가며 일치하는 가상 페이지 번호를 찾는다.
+
+![https://www.cs.uic.edu/~jbell/CourseNotes/OperatingSystems/images/Chapter8/8_19_HashedPageTable.jpg](https://www.cs.uic.edu/~jbell/CourseNotes/OperatingSystems/images/Chapter8/8_19_HashedPageTable.jpg)
+
+64 시스템 용으로는 클러스트 페이지 테이블을 자주 사용하는데, 해시 페이지의 테이블이 각 항목이 여러 개의 페이지를 가리킨다.
+
+- 즉 항목당 여러 페이지 프레임에 대한 변환 정보를 지닐 수 있다.
+
 ## 8.5.3 역 페이지 테이블(Inverted Page Table)
+
+일전에 언급한데로 운영체제는 각 프로세스의 페이지 테이블을 복사해 가지고 있다.
+
+- 이런 페이지 테이블의 크기는 굉장히 커질 수 있다.
+
+이 문제를 극복하기 위한 방법으로 역 페이지 테이블을 구성하는 것이 있다.
+
+- 각 항목은 프레임에 올라와 있는 페이지의 가상 주소, 프로세스 ID로 구성된다.
+- 시스템 내에는 하나의 페이지 테이블만 존재하게 된다.
+- 테이블 내 각 항목은 메모리 한 프레임씩을 가리키게 된다.
+
+![https://www.cs.uic.edu/~jbell/CourseNotes/OperatingSystems/images/Chapter8/8_20_InvertedPageTable.jpg](https://www.cs.uic.edu/~jbell/CourseNotes/OperatingSystems/images/Chapter8/8_20_InvertedPageTable.jpg)
+
+페이지 테이블이 점유하는 메모리가 적다는 단점이 있지만 메모리 주소 변환 시간이 오래 걸릴 수 있다.
+
+- 또한 메모리 공유도 불가능하다.
+- 물리 주소는 두 개 이상의 가상 주소를 가질 수 없다.
 
 # 8.6 Segmentation
 
 ## 8.6.1 기본 방법
 
+세그먼테이션은 논리 주조 공간을 세그먼트들의 집합으로 정의한다.
+
+- 각 세그먼트는 각각 이름과 길이를 가진다.
+- 논리 주소는 세그먼트 이름과 세그먼트 내에서의 변위를 표시한다.
+- 사용자는 주소를 세그먼트 이름과 변위로 지정한다.
+	- <segment-number, offset>
+	- 페이징은 프로그래머 모르게 하드웨어에 의해 페이지 번호와 변위로 분할된다.
+
+사용자 프로그램이 컴파일되면, 컴파일러는 자동적으로 프로그램을 반영하여 세그먼트들을 구축한다.
+
+1. 코드
+2. 전역변수
+3. 메모리 할당을 위한 힙
+4. 스레드를 위한 스택
+5. 표준 C 라이브러리
+
+컴파일 타임에 링크되는 라이브러리는 별도의 세그먼트에 할당될 것이다.
+
+로더는 세그먼트를 받아서 번호를 매겨준다.
+
+![https://www.cs.uic.edu/~jbell/CourseNotes/OperatingSystems/images/Chapter8/8_07_UsersView.jpg](https://www.cs.uic.edu/~jbell/CourseNotes/OperatingSystems/images/Chapter8/8_07_UsersView.jpg)
+
+
 ## 8.6.2 하드웨어
+
+세그먼트 테이블의 각 항목은 다음 2개를 갖는다
+
+- 세그먼트의 base - 세그먼트의 시작 물리 주소
+- 세그먼트의 limit - 세그먼트의 길이
+- 세그먼트 테이블은 기본적으로 base/limit 레지스터의 쌍으로 이루어진 배열
+
+![https://www.cs.uic.edu/~jbell/CourseNotes/OperatingSystems/images/Chapter8/8_08_SegmentationHardware.jpg](https://www.cs.uic.edu/~jbell/CourseNotes/OperatingSystems/images/Chapter8/8_08_SegmentationHardware.jpg)
 
 # 8.7 사례 Intel Pentium
 
+페이징과 세그먼테이션은 모두 장단점을 가지고, 어떤 구조에서는 둘 다 지원한다.
+
+intel pentium 구조는 순수 세그먼테이션과 페이지화된 세그먼테이션을 동시에 지원한다.
+
+- Pentium 시스템에서 CPU는 세그먼테이션 유닛에게 보내질 논리 주소를 만들어 낸다.
+- 세그먼테이션 유닛은 각각의 논리 주소를 선형 주소로 변환한다.
+- 선형 주소는 이어서 주 메모리의 물리 주소를 생성하는 페이지 유닛으로 보내지게 된다.
+
+따라서 세그먼테이션 유닛과 페이징 유닛은 MMU와 동일한 역할을 한다
+
+![https://www.cs.uic.edu/~jbell/CourseNotes/OperatingSystems/images/Chapter8/8_09_Segmentation.jpg](https://www.cs.uic.edu/~jbell/CourseNotes/OperatingSystems/images/Chapter8/8_09_Segmentation.jpg)
+
 ## 8.7.1 Pentium 세그먼테이션
+
+- 하나의 세그먼트가 최대 4GB의 크기를 가질 수 있음
+- 프로세스 당 최대 16K개의 세그먼트를 가짐
+
+각 프로세스의 논리 주소 공간은 두 개의 분할로 나누어진다.
+
+1. 프로세스가 독점적으로 사용하는 8K개의 세그먼트
+	- LDT(Local Descriptor Table)에 정보가 유지된다
+2. 모든 프로세스 사이에서 공유가 가능한 8K개의 세그먼트
+	- GDT(Global Descriptor Table)에 정보가 유지된다
+
+LDT와 GDT의 각 항목은 8B로 구성되며, 세그먼트의 기준 위치와 한계를 포함한다.
+
+논리 주소는 (selector, offset)의 쌍으로 구성되며 selector는 다음과 같은 16비트 수이다.
+
+1. s는 세그먼트 번호
+2. g는 세그먼트가 GDT/LDT 중 어디 있는지 여부
+3. p는 보호와 관련된 정보
+4. 변위는 32비트 수이다.
+
+![https://www.cs.uic.edu/~jbell/CourseNotes/OperatingSystems/images/Chapter8/8_21A_SelectorOffset.jpg](https://www.cs.uic.edu/~jbell/CourseNotes/OperatingSystems/images/Chapter8/8_21A_SelectorOffset.jpg)
+
+Pentium은 6개의 세그먼트용 레지스터를 가지고 있다.
+
+- 한 프로세스는 한 순간에 6개의 세그먼트를 가리킬 수 있다.
+- 또한 LDT/GDT의 해당 설명자를 저장할 수 있는 6개의 8B 레지스터를 가지고 있다.
+- 이를 통해 설명자를 캐싱한다.
+
+![https://www.cs.uic.edu/~jbell/CourseNotes/OperatingSystems/images/Chapter8/8_22_PentiumSegmentation.jpg](https://www.cs.uic.edu/~jbell/CourseNotes/OperatingSystems/images/Chapter8/8_22_PentiumSegmentation.jpg)
+
+![https://www.cs.uic.edu/~jbell/CourseNotes/OperatingSystems/images/Chapter8/8_21_AddressTranslation.jpg](https://www.cs.uic.edu/~jbell/CourseNotes/OperatingSystems/images/Chapter8/8_21_AddressTranslation.jpg)
 
 ## 8.7.2 Pentium 페이징
 
+![https://www.cs.uic.edu/~jbell/CourseNotes/OperatingSystems/images/Chapter8/8_22A_TwoLevelPageNumberOffset.jpg](https://www.cs.uic.edu/~jbell/CourseNotes/OperatingSystems/images/Chapter8/8_22A_TwoLevelPageNumberOffset.jpg)
+
+- 페이지 디렉터리의 항목 Page Size 플래그는, 값이 설정되면 페이지 프레임이 기본값인 4KB가 아닌 4MB라는 것을 의미한다.
+- 즉 하위 페이지 테이블을 가리키지 않고 직접 페이지 프레임을 가리키는 것을 의미한다.
+
+물리 메모리 사용의 효율성을 높히기 위해 페이지 테이블은 스왑 가능하다.
+
+- 페이지 디렉토리 항목의 invalid 비트를 통해 메모리 또는 디스크에 페이지 테이블에 있는지 확인할 수 있다.
+
 ## 8.7.3 Pentium 시스템 기반의 Linux
+
+Pentium에서 Linux는 오직 6개의 세그먼트를 사ㅛㅇ한다.
+
+1. 커널 코드
+2. 커널 데이터
+3. 사용자 코드
+4. 사용자 데이터
+5. 태스크 상태(task-state segment, TSS) - 문맥 교환 시 프로세스의 하드웨어 문맥을 저장하기 위해 사용됨
+6. 디폴트 지역 설명자 테이블(LDT) - 사용자가 요청하는 경우 이것 대신 사용할 수 있도록 한다.(초기값 같은 개념인듯)
+
+리눅스는 3단계 페이지 모델을 사용해 32비트와 64에서 모두 동작할 수 있도록 하였다
+
+하지만 펜티엄이 2단계 페이징 모델만을 지원하기에 리눅스는 중간 디렉토리의 크기를 0으로 설정해 2단계 페이징을 구현하였다.
+
+![https://www.cs.uic.edu/~jbell/CourseNotes/OperatingSystems/images/Chapter8/8_23A_LinuxAddress.jpg](https://www.cs.uic.edu/~jbell/CourseNotes/OperatingSystems/images/Chapter8/8_23A_LinuxAddress.jpg)
+
+![https://www.cs.uic.edu/~jbell/CourseNotes/OperatingSystems/images/Chapter8/8_24_ThreeLevelPaging.jpg](https://www.cs.uic.edu/~jbell/CourseNotes/OperatingSystems/images/Chapter8/8_24_ThreeLevelPaging.jpg)
